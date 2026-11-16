@@ -1,4 +1,17 @@
-const CACHE='lacovers-v3.0';const ASSETS=['./','./index.html','./styles.css','./app.js','./manifest.webmanifest','./icon.png','./icon-512.png'];
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('lacovers-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;event.respondWith(fetch(event.request).then(response=>{if(response.ok&&new URL(event.request.url).origin===self.location.origin){const copy=response.clone();caches.open(CACHE).then(c=>c.put(event.request,copy))}return response}).catch(()=>caches.match(event.request)))})
+const CACHE='lacovers-v4.0.0';
+const ASSETS=['./','./index.html','./styles.css?v=4.0.0','./app.js?v=4.0.0','./manifest.webmanifest','./icon.png','./icon-512.png'];
+self.addEventListener('install',e=>{
+  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
+});
+self.addEventListener('activate',e=>{
+  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('lacovers-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
+});
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  const req=e.request;
+  if(new URL(req.url).origin!==self.location.origin)return;
+  e.respondWith(fetch(req).then(response=>{
+    if(response.ok){const clone=response.clone();caches.open(CACHE).then(cache=>cache.put(req,clone));}
+    return response;
+  }).catch(()=>caches.match(req).then(cached=>cached|| (req.mode==='navigate'?caches.match('./index.html'):Response.error()))));
+});

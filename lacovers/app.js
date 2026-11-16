@@ -37,10 +37,10 @@ const STYLES=[
 ];
 const DEFAULT_TRACKS='01. Первая песня\n02. Вторая песня\n03. Третья песня\n04. Четвертая песня\n05. Пятая песня';
 function defaultProject(){return{id:'p'+Date.now()+Math.random().toString(16).slice(2,7),name:'Новый альбом',created:Date.now(),updated:Date.now(),mode:'cassette',style:0,font:'heavy',accent:'#ff51a5',title:'МОЯ ГРУППА',album:'МОЙ АЛЬБОМ',year:'2026',edition:'SPECIAL EDITION',tracks:DEFAULT_TRACKS,notes:'Записано с любовью. Музыка навсегда.',titlePos:69,titleScale:100,bw:false,guides:true,calibration:true,duplexCassette:false,copies:1,quality:300,photos:{front:null,back:null,inside:null},photoControls:{front:{zoom:1,x:0,y:0,rotate:0,flip:false,brightness:100,contrast:100},back:{zoom:1,x:0,y:0,rotate:0,flip:false,brightness:100,contrast:100},inside:{zoom:1,x:0,y:0,rotate:0,flip:false,brightness:100,contrast:100}}}}
-let project=defaultProject(),projects=[],selectedPanel='front',previewBack=false,previewPending=false,saveTimer=null,db=null,lastPdf=null,renderSeq=0,images=new Map();
+let project=defaultProject(),projects=[],selectedPanel='front',previewBack=false,previewPending=false,saveTimer=null,db=null,lastPdf=null,renderSeq=0,images=new Map(),activeStep='format',toastTimer=null;
 const dbReady=new Promise((resolve)=>{if(!window.indexedDB){resolve(null);return}let r;try{r=indexedDB.open('lacovers-projects-v1',1)}catch(e){resolve(null);return}r.onupgradeneeded=()=>{r.result.createObjectStore('projects',{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>resolve(null)});
 async function database(){return db??(db=await dbReady)}
-async function getAllProjects(){const d=await database();if(!d)return[];return new Promise(res=>{let r=d.transaction('projects','readonly').objectStore('projects').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>res([])})}
+async function getAllProjects(){const d=await database();if(!d){try{const v=storageGet('lacover-fallback');return v?[JSON.parse(v)]:[]}catch(e){return []}}return new Promise(res=>{let r=d.transaction('projects','readonly').objectStore('projects').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>res([])})}
 async function storeProject(p){const d=await database();if(!d){try{storageSet('lacover-fallback',JSON.stringify(p));return true}catch(e){showStatus('Память устройства заполнена. Сохраните резервную копию.',true);return false}}return new Promise(res=>{const r=d.transaction('projects','readwrite').objectStore('projects').put(structuredClone(p));r.onsuccess=()=>res(true);r.onerror=()=>{showStatus('Не удалось сохранить. Сохраните проект в файл.',true);res(false)}})}
 async function removeProject(id){const d=await database();if(!d)return;return new Promise(res=>{const r=d.transaction('projects','readwrite').objectStore('projects').delete(id);r.onsuccess=()=>res();r.onerror=()=>res()})}
 function autosave(){project.updated=Date.now();lastPdf=null;clearTimeout(saveTimer);const snapshot=project;saveTimer=setTimeout(()=>storeProject(snapshot).then(()=>refreshProjects(false)),550);schedulePreview()}
@@ -54,12 +54,32 @@ function ensurePhotoControls(panel){
 }
 function newProjectId(){return 'p'+Date.now()+Math.random().toString(16).slice(2,9)}
 function numberTracksText(text){return lines(text).map((t,i)=>String(i+1).padStart(2,'0')+'. '+t.replace(/^\s*(?:\d{1,3}\s*[.):\-–—]\s*|[•*\-]\s*)/,'')).join('\n')}
-function allowedPanels(){const m=project.mode;if(m==='cdFront')return [['front','Лицевая обложка']];if(m==='cdBack')return [['back','Задняя обложка']];if(m==='cassette')return [['front','Лицевая сторона'],['back','Задний клапан']];return [['front','Лицевая сторона'],['back','Задняя сторона'],['inside','Внутренняя сторона']]}
+function allowedPanels(){const m=project.mode;if(m==='cdFront')return [['front','Лицевая обложка']];if(m==='cdBack')return [['back','Задняя обложка']];if(m==='cassette')return [['front','Лицевая сторона'],['back','Задний клапан']];if(m==='cdSet')return [['front','Передняя сторона'],['back','Задняя сторона']];if(m==='booklet')return [['front','Передняя сторона'],['inside','Внутренняя сторона']];return [['front','Лицевая сторона'],['back','Задняя сторона'],['inside','Внутренняя сторона']]}
 function updatePhotoLabel(){const exists=!!project.photos[selectedPanel];$('removePhoto').style.display=exists?'inline-block':'none';const label=document.querySelector('.upload-zone label b');label.textContent=exists?'Заменить фото':'Выбрать фото'}
 function renderSwatches(){$('styleSwatches').replaceChildren(...STYLES.map((s,i)=>{const b=document.createElement('button');b.type='button';b.className='swatch'+(i===project.style?' selected':'');b.style.background=`linear-gradient(135deg,${s.colors[0]},${s.colors[1]})`;b.innerHTML='<b>'+s.name+'</b>';b.title='Стиль '+s.name;b.onclick=()=>{project.style=i;project.accent=s.accent;project.bw=false;$('accentColor').value=s.accent;$('bw').checked=false;renderSwatches();autosave()};return b}))}
-function updateDetails(){const mode=MODES[project.mode];const paper=mode.landscape?'A4 альбомный':'A4 книжный';const isCassette=project.mode==='cassette'||project.mode==='cassetteXL';$('duplexOption').hidden=!isCassette;$('previewReverse').hidden=!isCassette;$('previewReverse').textContent=previewBack?'Показать лицевую сторону':'Показать изнанку';if(!isCassette)previewBack=false;$('previewCaption').textContent=paper+' • '+mode.w+' × '+mode.h+' мм';$('panelLegend').replaceChildren(...mode.parts.map(t=>{let e=document.createElement('span');e.textContent=({front:'Передняя',back:'Задняя',inside:'Внутренняя',spine:'Корешок',spines:'2 корешка'})[t];return e}))}
-function showStatus(s,error=false){$('status').textContent=s;$('status').className=error?'error':''}
-function schedulePreview(){if(previewPending)return;previewPending=true;requestAnimationFrame(async()=>{previewPending=false;const seq=++renderSeq;const current=project;try{await renderPage($('preview'),current,0,96,1,previewBack);if(seq!==renderSeq)return}catch(e){console.error(e);showStatus('Ошибка предпросмотра: '+e.message,true)}})}
+function updateDetails(){updateWorkflowSummary();const mode=MODES[project.mode];const paper=mode.landscape?'A4 альбомный':'A4 книжный';const isCassette=project.mode==='cassette'||project.mode==='cassetteXL';$('duplexOption').hidden=!isCassette;$('previewReverse').hidden=!isCassette;$('previewReverse').textContent=previewBack?'Показать лицевую сторону':'Показать изнанку';if(!isCassette)previewBack=false;$('previewCaption').textContent=paper+' • '+mode.w+' × '+mode.h+' мм';$('panelLegend').replaceChildren(...mode.parts.map(t=>{let e=document.createElement('span');e.textContent=({front:'Передняя',back:'Задняя',inside:'Внутренняя',spine:'Корешок',spines:'2 корешка'})[t];return e}))}
+function showStatus(s,error=false){$('status').textContent=s;$('status').className=error?'error':'';if(activeStep!=='print'&&!/^Проект сохраняется/.test(s)){const toast=$('globalToast');if(toast){toast.textContent=s;toast.className='toast'+(error?' error':'');toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.hidden=true,3700)}}}
+async function renderQuickPreview(p,panel){
+ const canvas=$('quickPreview');if(!canvas)return;
+ const tape=p.mode==='cassette'||p.mode==='cassetteXL';
+ const dims=panel==='back'&&!tape?[137.5,118]:(tape?[65.1,101.6]:[120,120]);
+ const [w,h]=dims,ratio=w/h;
+ const px=420;canvas.width=px;canvas.height=Math.round(px/ratio);
+ const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#f3f5f8';ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.scale(canvas.width/w,canvas.height/h);
+ const imgs=await resolveImages(p);
+ if(panel==='back')drawBack(ctx,0,0,w,h,p,imgs,false);
+ else if(panel==='inside')drawInside(ctx,0,0,w,h,p,imgs);
+ else drawFront(ctx,0,0,w,h,p,imgs);
+ canvas.style.filter=p.bw?'grayscale(1)':'none';
+ const names={front:'Лицевая сторона',back:'Задняя сторона',inside:'Внутренняя сторона'};
+ $('quickPreviewCaption').textContent=names[panel]||'Макет';
+}
+function schedulePreview(){if(previewPending)return;previewPending=true;requestAnimationFrame(async()=>{previewPending=false;const seq=++renderSeq;const current=project,part=selectedPanel;try{
+ if(activeStep==='review')await renderPage($('preview'),current,0,96,1,previewBack);
+ if(activeStep==='design')await renderQuickPreview(current,part);
+ if(seq!==renderSeq)return;
+}catch(e){console.error(e);showStatus('Не удалось обновить предпросмотр: '+e.message,true)}})}
 function sheetDimensions(p){return MODES[p.mode].landscape?[297,210]:[210,297]}
 function artPlacements(p,count=1){const mode=MODES[p.mode],[paperW]=sheetDimensions(p);const mid=(paperW-mode.w)/2;
  if(p.mode==='cdSet')return[{type:'cdBack',x:(paperW-150)/2,y:12},{type:'cdFront',x:(paperW-120)/2,y:141}];
@@ -229,4 +249,38 @@ function bindForm(){const mapping={fontSelect:'font',accentColor:'accent',projec
  $('backupAllBtn').onclick=()=>exportAllProjects().catch(e=>showStatus('Ошибка архива: '+e.message,true));
  $('restoreAllInput').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{await importAllProjects(file)}catch(err){showStatus('Ошибка восстановления коллекции: '+err.message,true)}e.target.value=''});
  $('backupBtn').onclick=()=>{const json=JSON.stringify({application:'lacovers',version:1,project},null,2);offerDownload(new Blob([json],{type:'application/json'}),'Проект_'+(project.album||'Обложки')+'.json');showStatus('Резервная копия проекта сохранена.')};$('restoreInput').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{const data=JSON.parse(await file.text());if(data.application!=='lacovers'||!data.project?.mode||!MODES[data.project.mode])throw new Error('Неизвестный файл проекта');project={...defaultProject(),...data.project,id:'p'+Date.now(),updated:Date.now()};project.photos={front:null,back:null,inside:null,...data.project.photos};project.photoControls={...defaultProject().photoControls,...data.project.photoControls};for(const key of ['front','back','inside'])ensurePhotoControls(key);await storeProject(project);storageSet('lacover-current',project.id);refreshProjects();hydrate();showStatus('Проект восстановлен.')}catch(err){showStatus('Ошибка импорта: '+err.message,true)}e.target.value=''})}
-async function init(){bindForm();let all=await getAllProjects();let current=storageGet('lacover-current');if(!all.length){try{const old=storageGet('lacover-fallback');if(old)all=[JSON.parse(old)]}catch(e){}}project=all.find(p=>p.id===current)||all.sort((a,b)=>b.updated-a.updated)[0]||defaultProject();project.duplexCassette=!!project.duplexCassette;project.photos={front:null,back:null,inside:null,...project.photos};project.photoControls={...defaultProject().photoControls,...project.photoControls};for(const key of ['front','back','inside'])ensurePhotoControls(key);await storeProject(project);storageSet('lacover-current',project.id);hydrate();refreshProjects();if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});showStatus('Проект сохраняется автоматически на этом устройстве.')}init();
+// UI 4.0: compact, task-focused workflow. The printing engine and IndexedDB schema remain unchanged.
+const STEP_NAMES={format:'Формат',design:'Дизайн',review:'Проверка',print:'Печать'};
+const STEP_DETAILS={format:'Выбери тип коробки',design:'Фото, название и оформление',review:'Посмотри лист A4',print:'Получить PDF'};
+function updateWorkflowSummary(){
+ const mode=MODES[project.mode];if(!mode)return;
+ const name=mode.name;
+ if($('selectedFormatName'))$('selectedFormatName').textContent=name;
+ if($('selectedFormatDetail'))$('selectedFormatDetail').textContent=mode.w+' × '+mode.h+' мм · '+(mode.landscape?'A4 альбомный':'A4 книжный');
+ if($('printFormatName'))$('printFormatName').textContent=name;
+ if($('printFormatDims'))$('printFormatDims').textContent=mode.w+' × '+mode.h+' мм · PDF A4 · масштаб 1:1';
+ if($('bottomStepTitle'))$('bottomStepTitle').textContent=STEP_NAMES[activeStep];
+ if($('bottomStepDetail'))$('bottomStepDetail').textContent=STEP_DETAILS[activeStep];
+ if($('bottomNext'))$('bottomNext').textContent=activeStep==='print'?'Создать PDF ↗':'Продолжить →';
+}
+function setStep(step,shouldScroll=true){
+ if(!STEP_NAMES[step])return;
+ activeStep=step;
+ document.querySelectorAll('[data-step-panel]').forEach(el=>el.hidden=el.dataset.stepPanel!==step);
+ document.querySelectorAll('[data-step]').forEach(btn=>{const on=btn.dataset.step===step;btn.classList.toggle('active',on);if(on)btn.setAttribute('aria-current','step');else btn.removeAttribute('aria-current')});
+ updateWorkflowSummary();schedulePreview();
+ if(shouldScroll){const focused=document.activeElement;if(focused instanceof HTMLElement&&focused!==document.body)focused.blur();window.scrollTo({top:0,behavior:'smooth'})}
+}
+function bindWorkflow(){
+ document.querySelectorAll('[data-step]').forEach(btn=>btn.addEventListener('click',()=>setStep(btn.dataset.step)));
+ document.querySelectorAll('[data-goto]').forEach(btn=>btn.addEventListener('click',()=>setStep(btn.dataset.goto)));
+ $('bottomNext').addEventListener('click',async()=>{
+ if(activeStep==='print'){
+  const b=$('bottomNext');b.disabled=true;
+  try{await exportClick(false)}finally{b.disabled=false}
+ }else{
+  const ids=['format','design','review','print'];setStep(ids[Math.min(3,ids.indexOf(activeStep)+1)]);
+ }
+ });
+}
+async function init(){bindForm();bindWorkflow();setStep('format',false);let all=await getAllProjects();let current=storageGet('lacover-current');if(!all.length){try{const old=storageGet('lacover-fallback');if(old)all=[JSON.parse(old)]}catch(e){}}project=all.find(p=>p.id===current)||all.sort((a,b)=>b.updated-a.updated)[0]||defaultProject();project.duplexCassette=!!project.duplexCassette;project.photos={front:null,back:null,inside:null,...project.photos};project.photoControls={...defaultProject().photoControls,...project.photoControls};for(const key of ['front','back','inside'])ensurePhotoControls(key);await storeProject(project);storageSet('lacover-current',project.id);hydrate();refreshProjects();if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});showStatus('Проект сохраняется автоматически на этом устройстве.')}init();

@@ -1,1 +1,28 @@
-{"name":"ЛакОбложки — студия кассет и CD","short_name":"ЛакОбложки","description":"Обложки для аудиокассет и CD с точной печатью на A4","lang":"ru","start_url":"./","scope":"./","display":"standalone","display_override":["standalone"],"background_color":"#101321","theme_color":"#101321","icons":[{"src":"icon.png","type":"image/png","sizes":"192x192","purpose":"any maskable"},{"src":"icon-512.png","type":"image/png","sizes":"512x512","purpose":"any maskable"}]}
+{
+  "name": "ЛакОбложки — студия печати кассет и CD",
+  "short_name": "ЛакОбложки",
+  "description": "Удобный редактор обложек для точной печати A4",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
+  "background_color": "#edf1f5",
+  "theme_color": "#182434",
+  "icons": [
+    {
+      "src": "icon.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
