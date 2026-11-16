@@ -1,4 +1,4 @@
-# ЛакОбложки 5.0 — пошаговый мастер для iPhone
+# ЛакОбложки 5.0.1 — пошаговый мастер для iPhone
 
 Постоянная ссылка: https://zvukor1980-crypto.github.io/bk-kassety/lacovers/
 
