@@ -76,3 +76,6 @@ body.advanced-open .project-row{display:block}
 .wiz-print-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:14px 0}.wiz-print-options label{font-size:12px;color:#4c6174;font-weight:800}.wiz-print-options select{margin-top:7px;background:#fff}
 .wiz-checkbox{display:flex;align-items:center;gap:10px;padding:12px 0;color:#304b61;font-size:14px;font-weight:750}.wiz-checkbox input{width:20px;height:20px;flex:none}
 @media(max-width:390px){.wiz-toolbar{flex-wrap:wrap}.wiz-tools{margin-left:auto}.wiz-label span{display:none}.wiz-content{padding:20px 14px}.wiz-choice-grid{grid-template-columns:1fr}.wiz-card{border-radius:16px}}
+
+/* v6 artwork assembly review */
+.wiz-detail-caption{color:#415871;font-size:12px;font-weight:750;margin:14px 0 7px}.wiz-fullsize{background:#d9e1e8;padding:9px}.wiz-fullsize canvas{display:block;max-width:100%;width:100%;height:auto;object-fit:contain;box-shadow:0 1px 12px #0003} 
