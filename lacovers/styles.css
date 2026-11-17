@@ -118,3 +118,21 @@ body.advanced-open .project-row{display:block}
 .wiz-part-pictogram--front i:nth-child(3),.wiz-part-pictogram--spine i:nth-child(2),.wiz-part-pictogram--back i:nth-child(1),.wiz-part-pictogram--inside i:nth-child(3){background:#246585}
 .wiz-part-pictogram--inside i:nth-child(3){background:#527b65}
 @media(max-width:345px){.wiz-part-choices{gap:7px}.wiz-print-part{padding:10px 8px;min-height:130px}.wiz-print-part b{font-size:12px}}
+
+/* v11: prepare once, then share from a fresh iOS user gesture. */
+.wiz-build-status{font-size:12px;line-height:1.45;color:#586f80;margin:-4px 0 12px;padding:0 3px}
+.wiz-prepared{padding:16px;border:1.5px solid #83b4a4;border-radius:15px;background:#eff8f3;margin:14px 0 18px;box-shadow:0 6px 20px #163d2520}
+.wiz-prepared[hidden]{display:none}
+.wiz-prepared-heading{display:flex;align-items:start;gap:11px;margin-bottom:12px}
+.wiz-prepared-check{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;flex-shrink:0;background:#14765c;color:#fff;border-radius:50%;font-size:23px;font-weight:900}
+.wiz-prepared-heading div{min-width:0;display:flex;flex-direction:column;gap:3px}
+.wiz-prepared-heading strong{font-size:18px;color:#155943}
+.wiz-prepared-heading small{font-size:11px;color:#456c61;overflow-wrap:anywhere}
+.wiz-print-now{border:0;border-radius:12px;background:#155d47;color:white;width:100%;min-height:53px;padding:12px;font-size:14px;font-weight:850}
+.wiz-prepared p{font-size:12px;line-height:1.5;color:#335e50;margin:10px 0 12px}
+.wiz-ready-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wiz-ready-row button{border:1px solid #afd2c5;background:white;color:#174f40;font-weight:800;font-size:12px;border-radius:11px;min-height:44px;padding:9px}
+.wiz-print-extras{border:1px solid #d3dee7;background:#f9fbfd;border-radius:12px;padding:12px 14px;margin:13px 0;color:#36566e}
+.wiz-print-extras summary{cursor:pointer;font-size:12px;font-weight:800;line-height:1.5}
+.wiz-print-extras .wiz-export-row{margin-top:13px}
+@media(max-width:345px){.wiz-ready-row{gap:6px}.wiz-ready-row button{font-size:11px;padding:7px}}

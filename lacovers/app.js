@@ -43,7 +43,7 @@ async function database(){return db??(db=await dbReady)}
 async function getAllProjects(){const d=await database();if(!d){try{const v=storageGet('lacover-fallback');return v?[JSON.parse(v)]:[]}catch(e){return []}}return new Promise(res=>{let r=d.transaction('projects','readonly').objectStore('projects').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>res([])})}
 async function storeProject(p){const d=await database();if(!d){try{storageSet('lacover-fallback',JSON.stringify(p));return true}catch(e){showStatus('Память устройства заполнена. Сохраните резервную копию.',true);return false}}return new Promise(res=>{const r=d.transaction('projects','readwrite').objectStore('projects').put(structuredClone(p));r.onsuccess=()=>res(true);r.onerror=()=>{showStatus('Не удалось сохранить. Сохраните проект в файл.',true);res(false)}})}
 async function removeProject(id){const d=await database();if(!d)return;return new Promise(res=>{const r=d.transaction('projects','readwrite').objectStore('projects').delete(id);r.onsuccess=()=>res();r.onerror=()=>res()})}
-function autosave(){project.updated=Date.now();lastPdf=null;clearTimeout(saveTimer);const snapshot=project;saveTimer=setTimeout(()=>storeProject(snapshot).then(()=>refreshProjects(false)),550);schedulePreview()}
+function autosave(){project.updated=Date.now();lastPdf=null;updatePreparedPDF();clearTimeout(saveTimer);const snapshot=project;saveTimer=setTimeout(()=>storeProject(snapshot).then(()=>refreshProjects(false)),550);schedulePreview()}
 function refreshProjects(rebuild=true){const list=$('projectSelect');if(rebuild||!Array.from(list.options).some(o=>o.value===project.id)){getAllProjects().then(all=>{projects=all.sort((a,b)=>b.updated-a.updated);list.replaceChildren(...projects.map(p=>new Option((p.album||p.name||'Без названия')+' · '+MODES[p.mode]?.name,p.id)));list.value=project.id})}else{const opt=list.selectedOptions[0];if(opt)opt.textContent=(project.album||project.name||'Без названия')+' · '+MODES[project.mode]?.name}}
 function hydrate(){const value={fontSelect:project.font,accentColor:project.accent,projectTitle:project.title,albumTitle:project.album,year:project.year,edition:project.edition,tracks:project.tracks,notes:project.notes,titlePos:project.titlePos,titleScale:project.titleScale,bw:project.bw,guides:project.guides,calibration:project.calibration,cassetteDuplex:project.duplexCassette,copies:project.copies,quality:project.quality};for(const [id,v] of Object.entries(value)){const el=$(id);if(!el)continue;if(el.type==='checkbox')el.checked=v;else el.value=v}document.querySelectorAll('.format-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===project.mode));const choices=allowedPanels();$('panelSelect').replaceChildren(...choices.map(([v,l])=>new Option(l,v)));if(!choices.some(([k])=>k===selectedPanel))selectedPanel=choices[0][0];$('panelSelect').value=selectedPanel;const controls=ensurePhotoControls(selectedPanel);$('zoom').value=controls.zoom;if($('fitSelect'))$('fitSelect').value=controls.fit;$('photoPositionX').value=controls.x;$('photoPosition').value=controls.y;$('brightness').value=controls.brightness;$('contrast').value=controls.contrast;$('flipPhoto').setAttribute('aria-pressed',String(controls.flip));$('photoToolStatus').textContent='Поворот: '+controls.rotate+'°'+(controls.flip?' • зеркальное отражение':'');renderSwatches();updatePhotoLabel();updateDetails();schedulePreview()}
 function ensurePhotoControls(panel){
@@ -58,7 +58,7 @@ function allowedPanels(){const m=project.mode;if(m==='cdFront')return [['front',
 function updatePhotoLabel(){const exists=!!project.photos[selectedPanel];$('removePhoto').style.display=exists?'inline-block':'none';const label=document.querySelector('.upload-zone label b');label.textContent=exists?'Заменить фото':'Выбрать фото'}
 function renderSwatches(){$('styleSwatches').replaceChildren(...STYLES.map((s,i)=>{const b=document.createElement('button');b.type='button';b.className='swatch'+(i===project.style?' selected':'');b.style.background=`linear-gradient(135deg,${s.colors[0]},${s.colors[1]})`;b.innerHTML='<b>'+s.name+'</b>';b.title='Стиль '+s.name;b.onclick=()=>{project.style=i;project.accent=s.accent;project.bw=false;$('accentColor').value=s.accent;$('bw').checked=false;renderSwatches();autosave()};return b}))}
 function updateDetails(){updateWorkflowSummary();const mode=MODES[project.mode];const paper=mode.landscape?'A4 альбомный':'A4 книжный';const isCassette=project.mode==='cassette'||project.mode==='cassetteXL';$('duplexOption').hidden=!isCassette;$('previewReverse').hidden=!isCassette;$('previewReverse').textContent=previewBack?'Показать лицевую сторону':'Показать изнанку';if(!isCassette)previewBack=false;$('previewCaption').textContent=paper+' • '+mode.w+' × '+mode.h+' мм';$('panelLegend').replaceChildren(...mode.parts.map(t=>{let e=document.createElement('span');e.textContent=({front:'Передняя',back:'Задняя',inside:'Внутренняя',spine:'Корешок',spines:'2 корешка'})[t];return e}))}
-function showStatus(s,error=false){$('status').textContent=s;$('status').className=error?'error':'';if(activeStep!=='print'&&!/^Проект сохраняется/.test(s)){const toast=$('globalToast');if(toast){toast.textContent=s;toast.className='toast'+(error?' error':'');toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.hidden=true,3700)}}}
+function showStatus(s,error=false){$('status').textContent=s;$('status').className=error?'error':'';if(activeStep!=='print'&&!(wizardStarted&&wizardKey==='print')&&!/^Проект сохраняется/.test(s)){const toast=$('globalToast');if(toast){toast.textContent=s;toast.className='toast'+(error?' error':'');toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.hidden=true,3700)}}}
 async function renderQuickPreview(p,panel){
  const canvas=$('quickPreview');if(!canvas)return;
  const tape=p.mode==='cassette'||p.mode==='cassetteXL';
@@ -342,6 +342,55 @@ async function exportPNG(){
 }
 function offerDownload(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),45000)}
 async function exportClick(share){const btn=$('exportBtn');try{btn.disabled=true;const pdf=lastPdf||await makePDF();if(share){const file=new File([pdf.blob],pdf.name,{type:'application/pdf'});if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file],title:'Готовые обложки A4'});return}offerDownload(pdf.blob,pdf.name);showStatus('PDF создан. Открой его и выбери «Поделиться» → «Печать».')}else{offerDownload(pdf.blob,pdf.name)}}catch(e){if(e.name!=='AbortError')showStatus('Не удалось создать PDF: '+e.message,true)}finally{btn.disabled=false}}
+// v11: Preparing a PDF and opening the iOS share sheet are two separate user taps.
+// This avoids losing transient user activation while generating 300 DPI pages.
+function updatePreparedPDF(){
+ const ready=$('wizPrepared');if(!ready)return;
+ ready.hidden=!lastPdf;
+ const build=$('wizExport');if(build)build.textContent=lastPdf?'Подготовить PDF заново':'Подготовить PDF A4';
+ if(!lastPdf)return;
+ const name=$('wizPreparedName');if(name)name.textContent=lastPdf.name;
+ const meta=$('wizPreparedMeta');if(meta)meta.textContent=(lastPdf.blob.size/1048576).toFixed(1)+' МБ · PDF A4 · готов к отправке';
+}
+async function prepareWizardPDF(){
+ const btn=$('wizExport');if(!btn||btn.disabled)return;
+ btn.disabled=true;btn.textContent='Готовлю PDF…';
+ const status=$('wizBuildStatus');if(status)status.textContent='Собираю печатные листы в точном масштабе…';
+ try{
+  await makePDF();updatePreparedPDF();
+  if(status)status.textContent='Готово. Выберите «Печать на iPhone», затем пункт «Печать» в меню iOS.';
+  const ready=$('wizPrepared');if(ready){ready.hidden=false;ready.scrollIntoView({block:'nearest',behavior:'smooth'})}
+ }catch(e){if(status)status.textContent='Не удалось создать PDF: '+e.message;showStatus('Ошибка PDF: '+e.message,true)}
+ finally{btn.disabled=false;updatePreparedPDF()}
+}
+function printReadyPDF(){
+ const pdf=lastPdf;
+ if(!pdf){showStatus('Сначала нажмите «Подготовить PDF A4».',true);return}
+ const file=new File([pdf.blob],pdf.name,{type:'application/pdf'});
+ try{
+  if(typeof navigator.share==='function'&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+   // Crucially, do NOT await before navigator.share: iOS requires a fresh user gesture.
+   const attempt=navigator.share({files:[file],title:'ЛакОбложки — печать A4'});
+   Promise.resolve(attempt).catch(e=>{if(e.name!=='AbortError'){showStatus('Меню iPhone не открылось. Выберите «Сохранить PDF» или «Открыть PDF».',true)}});
+   return;
+  }
+ }catch(e){console.warn('iOS share not available',e)}
+ offerDownload(pdf.blob,pdf.name);
+ showStatus('PDF сохранён. Откройте его в «Файлы» → Поделиться → Печать.');
+}
+function openReadyPDF(){
+ if(!lastPdf){showStatus('Сначала подготовьте PDF.',true);return}
+ // The anchor click happens directly in the button handler, not after an asynchronous render.
+ const url=URL.createObjectURL(lastPdf.blob),a=document.createElement('a');
+ a.href=url;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),180000);
+ showStatus('PDF открыт. Для печати откройте меню «Поделиться» → «Печать».');
+}
+function saveReadyPDF(){
+ if(!lastPdf){showStatus('Сначала подготовьте PDF.',true);return}
+ offerDownload(lastPdf.blob,lastPdf.name);
+ showStatus('PDF сохранён. Его можно найти в загрузках Safari или приложении «Файлы».');
+}
 async function photoToDataURL(file){if(file.size>40*1024*1024)throw new Error('Фото больше 40 МБ — выбери другое');let url=await new Promise((res,rej)=>{let fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=()=>rej(new Error('Не удалось прочитать фото'));fr.readAsDataURL(file)});const im=await loadImage(url);if(!im)throw new Error('Неизвестный формат фото. Попробуй JPG/PNG');let max=2400,f=Math.min(1,max/Math.max(im.width,im.height));let c=document.createElement('canvas');c.width=Math.round(im.width*f);c.height=Math.round(im.height*f);c.getContext('2d').drawImage(im,0,0,c.width,c.height);let out=c.toDataURL('image/jpeg',.89);c.width=c.height=1;return out}
 async function exportAllProjects(){
  await storeProject(project);
@@ -528,8 +577,15 @@ function wizPrintScreen(){
  ${tape&&part==='full'?`<label class="wiz-checkbox"><input type="checkbox" id="wizDuplex" ${project.duplexCassette?'checked':''}> Печатать обе стороны вкладыша</label>`:''}
  <div id="wizPrintPlan">${printPlanHtml(project)}</div>
  <div class="wiz-preflight" id="wizPrintCheck" role="status" aria-live="polite"><div class="wiz-preflight-loading">Проверяю фотографии…</div></div>
- <button class="wiz-primary-action" id="wizExport" type="button">Создать PDF для печати ↗</button>
- <div class="wiz-export-row"><button type="button" id="wizShare">Отправить PDF на принтер</button><button type="button" id="wizDiecut">Пробная выкройка без фотографий — 1:1</button><button type="button" id="wizProof">Проверить принтер: квадрат 100 мм</button></div>
+ <button class="wiz-primary-action" id="wizExport" type="button">Подготовить PDF A4</button>
+ <div id="wizBuildStatus" class="wiz-build-status" role="status" aria-live="polite">PDF будет готов к печати, но не будет отправлен на принтер без вашего выбора.</div>
+ <div id="wizPrepared" class="wiz-prepared" hidden aria-live="polite">
+  <div class="wiz-prepared-heading"><span class="wiz-prepared-check" aria-hidden="true">✓</span><div><strong>PDF готов!</strong><small id="wizPreparedName"></small><small id="wizPreparedMeta"></small></div></div>
+  <button type="button" class="wiz-print-now" id="wizShare">Печать на iPhone / Поделиться ↗</button>
+  <p>В системном меню iPhone выберите <b>«Печать»</b>. Если принтер не найден, сохраните PDF и распечатайте с компьютера.</p>
+  <div class="wiz-ready-row"><button type="button" id="wizOpen">Открыть PDF</button><button type="button" id="wizSave">Сохранить PDF</button></div>
+ </div>
+ <details class="wiz-print-extras"><summary>Дополнительно: примерка и проверка принтера</summary><div class="wiz-export-row"><button type="button" id="wizDiecut">Пробная выкройка без фотографий — 1:1</button><button type="button" id="wizProof">Проверить принтер: квадрат 100 мм</button></div></details>
  <p class="wiz-note">Печать 100% / «фактический размер». Не включай «подогнать». Проверяй линейку 50 мм перед разрезанием.</p>
  ${wizArtPlaceholder()}</div>`;
 }
@@ -545,7 +601,7 @@ function renderWizard(){const steps=wizSteps();if(!steps.includes(wizardKey))wiz
  c.innerHTML=html;
  $('wizardBack').disabled=ix===0;$('wizardBack').hidden=wizardKey==='start';$('wizardNext').hidden=wizardKey==='start'||wizardKey==='print';$('wizardNext').textContent=wizardKey==='print'?'Создать PDF ↗':'Далее →';$('wizardFeedback').textContent='';
  schedulePreview();
- if(wizardKey==='print')refreshPrintCheck();
+ if(wizardKey==='print'){refreshPrintCheck();updatePreparedPDF()}
 }
 async function renderWizardPreview(p){const canvas=$('wizardPreview');if(!canvas||!canvas.isConnected)return;const key=wizardKey;if(key==='review'||key==='print'){await renderPage(canvas,key==='review'?{...p,printPart:'full'}:p,0,90,key==='print'?undefined:1,false);const detail=$('wizardDetail');if(detail&&p.mode.startsWith('cassette')){
   const part=key==='print'?getPrintPart(p):'full';
@@ -603,8 +659,10 @@ function setupWizard(){const area=$('wizardProjectArea'),row=document.querySelec
    if(action.dataset.wizAction==='return-text'){wizardKey='text';renderWizard()}
    if(action.dataset.wizAction==='fix-photo'){const panel=action.dataset.wizPanel||'front';wizardKey='photo:'+panel;renderWizard()}
    return}
-  if(e.target.closest('#wizExport')){const btn=e.target.closest('#wizExport');btn.disabled=true;try{await exportClick(false)}finally{btn.disabled=false}return}
-  if(e.target.closest('#wizShare')){const btn=e.target.closest('#wizShare');btn.disabled=true;try{await exportClick(true)}finally{btn.disabled=false}return}
+  if(e.target.closest('#wizExport')){await prepareWizardPDF();return}
+  if(e.target.closest('#wizShare')){printReadyPDF();return}
+  if(e.target.closest('#wizOpen')){openReadyPDF();return}
+  if(e.target.closest('#wizSave')){saveReadyPDF();return}
   if(e.target.closest('#wizProof')){await exportProof();return}
   if(e.target.closest('#wizDiecut')){await exportDiecut();return}
  });

@@ -1,5 +1,5 @@
-const CACHE='lacovers-v10.0.0';
-const ASSETS=['./','./index.html','./styles.css?v=7.0.0','./app.js?v=7.0.0','./manifest.webmanifest','./assets/raash-front.jpg','./assets/raash-spine.jpg','./icon.png','./icon-512.png'];
+const CACHE='lacovers-v11.0.0';
+const ASSETS=['./','./index.html','./styles.css?v=11.0.0','./app.js?v=11.0.0','./manifest.webmanifest','./assets/raash-front.jpg','./assets/raash-spine.jpg','./icon.png','./icon-512.png'];
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });
