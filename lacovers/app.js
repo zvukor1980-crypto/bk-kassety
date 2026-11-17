@@ -357,22 +357,97 @@ function wizSteps(){return wizardStarted?['media','format',...wizPhotoPanels().m
 const wizPanelNames={front:'лицевой стороны',spine:'корешка кассеты',back:'заднего клапана',inside:'внутренней стороны'};
 function wizTitle(key){if(key==='start')return 'Как начнём?';if(key==='media')return 'Что оформляем?';if(key==='format')return 'Какой нужен вкладыш?';if(key.startsWith('photo:'))return 'Фотография '+wizPanelNames[key.split(':')[1]];return ({text:'Нужны ли надписи?',style:'Как оформить обложку?',review:'Всё правильно?',print:'Готовим к печати'})[key]||'Обложки'}
 function wizChoice(v,title,description,icon,selected){return `<button class="wiz-choice" type="button" data-wiz-choice="${htmlEscape(v)}" aria-pressed="${selected?'true':'false'}"><span class="wiz-emoji" aria-hidden="true">${icon}</span><span class="wiz-choice-copy"><b>${htmlEscape(title)}</b><small>${htmlEscape(description)}</small></span><span class="wiz-mark">✓</span></button>`}
-function wizArtPlaceholder(){const detail=project.mode.startsWith('cassette')&&(wizardKey==='review'||(wizardKey==='print'&&getPrintPart(project)==='full'));return (detail?'<div class="wiz-detail-caption">Весь вкладыш крупно — задний клапан, корешок, лицевая сторона</div><div class="wiz-preview-wrap wiz-fullsize"><canvas id="wizardDetail" role="img" aria-label="Крупная схема вкладыша, без промежутков"></canvas></div><div class="wiz-detail-caption">Как это расположено на A4 для печати</div>':'')+'<div class="wiz-preview-wrap"><canvas id="wizardPreview" role="img" aria-label="Обновляемый макет обложки"></canvas></div>'}
+function wizArtPlaceholder(){
+ const cassette=project.mode.startsWith('cassette');
+ const detail=cassette&&(wizardKey==='review'||wizardKey==='print');
+ const part=wizardKey==='print'?getPrintPart(project):'full';
+ const label=part==='full'?'Весь вкладыш крупно — без пустых промежутков':CASSETTE_PRINT_PARTS[part].label+' — увеличенная проверка перед печатью';
+ return (detail?`<div class="wiz-detail-caption">${label}</div><div class="wiz-preview-wrap wiz-fullsize"><canvas id="wizardDetail" role="img" aria-label="Крупный макет выбранной детали"></canvas></div><div class="wiz-detail-caption">Расположение на листе A4 в масштабе 1:1</div>`:'')+'<div class="wiz-preview-wrap"><canvas id="wizardPreview" role="img" aria-label="Обновляемый макет обложки"></canvas></div>';
+}
 function wizPhotoScreen(panel){selectedPanel=panel;const exists=!!project.photos?.[panel],controls=ensurePhotoControls(panel);return `<div class="wiz-content"><div class="wiz-eyebrow">ФОТОГРАФИЯ · ${panel==='front'?'ПЕРЕД':panel==='spine'?'КОРЕШОК':panel==='back'?'ЗАД':'ВНУТРИ'}</div><h1>${wizTitle('photo:'+panel)}</h1><p class="wiz-desc">${panel==='spine'?'Здесь нужна именно узкая вертикальная картинка для корешка (12,7 × 101,6 мм). Не загружай её на задний клапан. Если картинка уже есть, оставь её без надписей.':'Загрузи фотографию или пропусти. Программа сохранит пропорции, не обрежет исходное изображение и разместит его точно.'}</p>${wizArtPlaceholder()}<div class="wiz-file-row"><label class="wiz-upload"><input id="wizPhotoInput" type="file" accept="image/*">${exists?'Заменить фотографию':'Выбрать фотографию с iPhone'}</label>${exists?'<button class="wiz-link" type="button" data-wiz-action="remove-photo">Убрать фото с этой стороны</button>':''}</div><div class="wiz-mini-head">Как разместить фото? <span>Можно изменить позже</span></div><div class="wiz-options">${wizChoice('fit:contain-blur','Целиком + мягкий фон','Оригинальное фото полностью видно; края заполняются размытым фоном','▣',controls.fit==='contain-blur')}${wizChoice('fit:contain-solid','Целиком + спокойный фон','Фото без обрезки, с однотонными полями','▢',controls.fit==='contain-solid')}${wizChoice('fit:cover','Заполнить весь вкладыш','Края могут обрезаться. Только по вашему выбору','▧',controls.fit==='cover')}</div><details class="wiz-carddetails"><summary>Точно подвинуть или повернуть фото</summary><div class="wiz-fields"><label>Масштаб <input type="range" data-wiz-photo="zoom" min="1" max="2.5" step="0.05" value="${controls.zoom}"></label><label>Влево / вправо <input type="range" data-wiz-photo="x" min="-100" max="100" step="5" value="${controls.x}"></label><label>Вверх / вниз <input type="range" data-wiz-photo="y" min="-100" max="100" step="5" value="${controls.y}"></label><div class="wiz-compact-controls"><button type="button" data-wiz-action="rotate">Повернуть 90°</button><button type="button" data-wiz-action="reset-photo">Сбросить</button></div></div></details><p class="wiz-note">Фото уже с текстом? Ничего добавлять не будем, если на следующем шаге выберешь «Без надписей».</p></div>`}
 function wizTextFields(){return `<div class="wiz-fields"><label>Название исполнителя <input data-wiz-field="title" maxlength="90" placeholder="Необязательно" value="${htmlEscape(project.title)}"></label><label>Название альбома <input data-wiz-field="album" maxlength="110" placeholder="Необязательно" value="${htmlEscape(project.album)}"></label><label>Год <input data-wiz-field="year" maxlength="30" placeholder="Необязательно" value="${htmlEscape(project.year)}"></label><label>Подпись / тип издания <input data-wiz-field="edition" maxlength="70" placeholder="Необязательно" value="${htmlEscape(project.edition)}"></label><label>Песни, каждую на новой строке <textarea data-wiz-field="tracks" rows="4" placeholder="Если нужны на задней стороне">${htmlEscape(project.tracks)}</textarea></label><label>Внутренний текст <textarea data-wiz-field="notes" rows="3" placeholder="Можно оставить пустым">${htmlEscape(project.notes)}</textarea></label></div><div class="wiz-mini-head">Идеи подписей (только если нажать)</div><div class="wiz-suggest"><button type="button" data-wiz-suggest="Концертная запись">Концертная запись</button><button type="button" data-wiz-suggest="Коллекционное издание">Коллекционное издание</button><button type="button" data-wiz-suggest="Домашний архив">Домашний архив</button><button type="button" data-wiz-suggest="Сборник">Сборник</button></div>`}
+// Print preflight is advisory: it never silently modifies or rejects a user's artwork.
+const PRINT_DIMS={
+ front:{cassette:[65.1,101.6],cassetteXL:[65.1,101.6],cdFront:[120,120],cdBack:[0,0],cdSet:[120,120],booklet:[120,120]},
+ spine:{cassette:[12.7,101.6],cassetteXL:[12.7,101.6],cdBack:[6.25,118],cdSet:[6.25,118]},
+ back:{cassette:[25.4,101.6],cassetteXL:[25.4,101.6],cdBack:[137.5,118],cdSet:[137.5,118]},
+ inside:{cassetteXL:[65.1,101.6],booklet:[120,120]}
+};
+function activePrintPanels(p){
+ const selected=getPrintPart(p),tape=p.mode.startsWith('cassette');
+ if(tape&&selected!=='full')return [selected];
+ if(p.mode==='cassette')return ['front','spine','back'];
+ if(p.mode==='cassetteXL')return ['front','spine','back','inside'];
+ if(p.mode==='cdFront')return ['front'];
+ if(p.mode==='cdBack')return ['back'];
+ if(p.mode==='booklet')return ['front','inside'];
+ return ['front','back'];
+}
+function panelPrintDpi(img,dimension,control){
+ if(!img||!dimension||dimension[0]===0)return null;
+ const turn=(Number(control.rotate)||0)%180!==0;
+ const iw=turn?img.height:img.width, ih=turn?img.width:img.height;
+ const [width,height]=dimension;
+ const ratio=control.fit==='cover'?Math.max(width/iw,height/ih):Math.min(width/iw,height/ih);
+ const zoom=Math.max(1,Math.min(2.5,Number(control.zoom)||1));
+ return Math.round(25.4/(ratio*zoom));
+}
+async function analyzePrint(p){
+ const entries=[],panels=activePrintPanels(p);
+ for(const panel of panels){
+  const img=p.photos?.[panel]?await loadImage(p.photos[panel]):null;
+  if(!img){
+   const label=({front:'Лицевая сторона',spine:'Корешок',back:'Задний клапан',inside:'Внутренняя сторона'})[panel];
+   entries.push({panel,level:panel==='front'&&panels.includes('front')?'warn':'note',message:label+': нет фотографии — будет нейтральный фон'});
+   continue;
+  }
+  const ctl=ensurePhotoControlsFor(p,panel);
+  const dims=PRINT_DIMS[panel]?.[p.mode];
+  const dpi=panelPrintDpi(img,dims,ctl);
+  if(!dpi)continue;
+  let level=dpi<125?'warn':dpi<200?'note':'ok';
+  const label=({front:'Лицевая',spine:'Корешок',back:'Задняя',inside:'Внутренняя'})[panel];
+  const quality=dpi<125?'очень низкая детализация':dpi<200?'качество может быть мягким':'достаточная детализация';
+  entries.push({panel,level,message:`${label}: ${img.width} × ${img.height} px · около ${dpi} DPI — ${quality}`});
+  if(ctl.fit==='cover'){
+   const rotated=(Number(ctl.rotate)||0)%180!==0,srcRatio=rotated?img.height/img.width:img.width/img.height,dstRatio=dims[0]/dims[1];
+   if(Math.abs(Math.log(srcRatio/dstRatio))>.08)entries.push({panel,level:'warn',message:label+': выбран режим заполнения — часть фотографии будет обрезана'});
+  }
+ }
+ return entries;
+}
+function ensurePhotoControlsFor(p,panel){
+ const normal={zoom:1,rotate:0,fit:'contain-blur'};
+ return {...normal,...(p.photoControls?.[panel]||{})};
+}
+async function refreshPrintCheck(){
+ const area=$('wizPrintCheck');if(!area||wizardKey!=='print')return;
+ const liveId=area.dataset.token=(Number(area.dataset.token||0)+1).toString();
+ area.innerHTML='<div class="wiz-preflight-loading">Проверяю фотографии и размеры...</div>';
+ try{
+  const result=await analyzePrint(project);
+  if(!area.isConnected||area.dataset.token!==liveId)return;
+  const hasWarning=result.some(x=>x.level==='warn'),hasPhoto=result.some(x=>!x.message.includes('нет фотографии'));
+  let header=!hasPhoto?'Макет без фотографий':hasWarning?'Есть что проверить':'Макет проверен';
+  area.innerHTML=`<div class="wiz-preflight-title"><span class="wiz-preflight-dot ${hasWarning?'warn':'ok'}"></span><strong>${header}</strong></div>`+
+   `<div class="wiz-preflight-list">${result.map(x=>`<div class="wiz-preflight-row ${x.level}"><span>${htmlEscape(x.message)}</span>${x.level==='warn'?`<button type="button" data-wiz-action="fix-photo" data-wiz-panel="${x.panel}">Исправить</button>`:''}</div>`).join('')}</div>`+
+   '<p class="wiz-preflight-foot">Оценка по исходным пикселям: она не гарантирует качество принтера. Сам PDF создаётся в физических миллиметрах, печатайте 100%.</p>';
+ }catch(e){area.textContent='Проверку фотографии не удалось завершить. Можно создать PDF и проверить результат вручную.'}
+}
 function wizPrintScreen(){
  const tape=project.mode.startsWith('cassette'),part=getPrintPart(project);
  const choices=tape?`<div class="wiz-part-card"><label for="wizPrintPart" class="wiz-part-title">Что именно напечатать?</label>
   <select id="wizPrintPart" aria-label="Часть кассетного вкладыша">
    ${Object.entries(CASSETTE_PRINT_PARTS).filter(([key])=>key!=='inside'||project.mode==='cassetteXL').map(([key,spec])=>`<option value="${key}" ${part===key?'selected':''}>${spec.label}${key==='full'?'':` · ${spec.w} × ${spec.h} мм`}</option>`).join('')}
   </select><p class="wiz-part-note">${part==='full'?'Все части вместе, со сгибами без промежутков.':`Только выбранная часть. Размер ${CASSETTE_PRINT_PARTS[part].w} × ${CASSETTE_PRINT_PARTS[part].h} мм, с отметками разреза.`}</p></div>`:'';
- return `<div class="wiz-content"><div class="wiz-eyebrow">ФИНИШ</div><h1>Печать готова</h1>
+ return `<div class="wiz-content"><div class="wiz-eyebrow">ФИНИШ</div><h1>Проверка и печать</h1>
  <p class="wiz-desc">Выбери, что печатать. Программа подготовит лист A4 в точном размере.</p>
  <div class="wiz-success">✓ ${htmlEscape(MODES[project.mode].name)} · 100% · PDF A4</div>
  ${choices}
  <div class="wiz-print-options"><label>Сколько экземпляров?<select data-wiz-field="copies">${[1,2,4,6].map(n=>`<option value="${n}" ${+project.copies===n?'selected':''}>${n} шт.</option>`).join('')}</select></label>
  <label>Тип печати<select data-wiz-field="bw"><option value="false" ${!project.bw?'selected':''}>Цветная</option><option value="true" ${project.bw?'selected':''}>Чёрно-белая</option></select></label></div>
  ${tape&&part==='full'?`<label class="wiz-checkbox"><input type="checkbox" id="wizDuplex" ${project.duplexCassette?'checked':''}> Печатать обе стороны вкладыша</label>`:''}
+ <div class="wiz-preflight" id="wizPrintCheck" role="status" aria-live="polite"><div class="wiz-preflight-loading">Проверяю фотографии…</div></div>
  <button class="wiz-primary-action" id="wizExport" type="button">Создать PDF для печати ↗</button>
  <div class="wiz-export-row"><button type="button" id="wizShare">Отправить PDF на принтер</button><button type="button" id="wizProof">Пробный лист для проверки размеров</button></div>
  <p class="wiz-note">Печать 100% / «фактический размер». Не включай «подогнать». Проверяй линейку 50 мм перед разрезанием.</p>
@@ -390,8 +465,19 @@ function renderWizard(){const steps=wizSteps();if(!steps.includes(wizardKey))wiz
  c.innerHTML=html;
  $('wizardBack').disabled=ix===0;$('wizardBack').hidden=wizardKey==='start';$('wizardNext').hidden=wizardKey==='start';$('wizardNext').textContent=wizardKey==='print'?'Создать PDF ↗':'Далее →';$('wizardFeedback').textContent='';
  schedulePreview();
+ if(wizardKey==='print')refreshPrintCheck();
 }
-async function renderWizardPreview(p){const canvas=$('wizardPreview');if(!canvas||!canvas.isConnected)return;const key=wizardKey;if(key==='review'||key==='print'){await renderPage(canvas,key==='review'?{...p,printPart:'full'}:p,0,90,1,false);const detail=$('wizardDetail');if(detail&&p.mode.startsWith('cassette')){const dim=MODES[p.mode];detail.width=900;detail.height=Math.round(900*dim.h/dim.w);const ctx=detail.getContext('2d',{alpha:false});ctx.fillStyle='white';ctx.fillRect(0,0,detail.width,detail.height);ctx.scale(detail.width/dim.w,detail.height/dim.h);const images=await resolveImages(p);art(ctx,p.mode,0,0,p,images)}return}
+async function renderWizardPreview(p){const canvas=$('wizardPreview');if(!canvas||!canvas.isConnected)return;const key=wizardKey;if(key==='review'||key==='print'){await renderPage(canvas,key==='review'?{...p,printPart:'full'}:p,0,90,1,false);const detail=$('wizardDetail');if(detail&&p.mode.startsWith('cassette')){
+  const part=key==='print'?getPrintPart(p):'full';
+  const dims=part==='full'?MODES[p.mode]:CASSETTE_PRINT_PARTS[part];
+  const targetHeight=650,physicalW=dims.w,physicalH=dims.h;
+  detail.height=targetHeight;detail.width=Math.max(30,Math.round(targetHeight*physicalW/physicalH));
+  const ctx=detail.getContext('2d',{alpha:false});ctx.fillStyle='white';ctx.fillRect(0,0,detail.width,detail.height);
+  ctx.scale(detail.width/physicalW,detail.height/physicalH);
+  const images=await resolveImages(p);
+  if(part==='full')art(ctx,p.mode,0,0,p,images);else drawCassettePart(ctx,part,0,0,p,images);
+  detail.style.filter=p.bw?'grayscale(1)':'none';
+ }return}
  const panel=key.startsWith('photo:')?key.split(':')[1]:'front';const isTape=p.mode.startsWith('cassette');if(isTape){const mode=MODES[p.mode];canvas.width=640;canvas.height=Math.round(canvas.width*mode.h/mode.w);const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.scale(canvas.width/mode.w,canvas.height/mode.h);const loaded=await resolveImages(p);art(ctx,p.mode,0,0,p,loaded);canvas.style.filter=p.bw?'grayscale(1)':'none';return}const dims=panel==='back'&&isTape?[25.4,101.6]:panel==='back'?[137.5,118]:isTape?[65.1,101.6]:[120,120];const [w,h]=dims;canvas.width=480;canvas.height=Math.round(480*h/w);const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#f2f2f2';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.scale(canvas.width/w,canvas.height/h);const images=await resolveImages(p);if(panel==='back')drawBack(ctx,0,0,w,h,p,images,isTape);else if(panel==='inside')drawInside(ctx,0,0,w,h,p,images);else drawFront(ctx,0,0,w,h,p,images);
  canvas.style.filter=p.bw?'grayscale(1)':'none';
 }
@@ -434,6 +520,7 @@ function setupWizard(){const area=$('wizardProjectArea'),row=document.querySelec
    if(action.dataset.wizAction==='remove-photo'){project.photos[selectedPanel]=null;autosave();renderWizard()}
    if(action.dataset.wizAction==='return-photo'){wizardKey='photo:'+wizPhotoPanels()[0];renderWizard()}
    if(action.dataset.wizAction==='return-text'){wizardKey='text';renderWizard()}
+   if(action.dataset.wizAction==='fix-photo'){const panel=action.dataset.wizPanel||'front';wizardKey='photo:'+panel;renderWizard()}
    return}
   if(e.target.closest('#wizExport')){const btn=e.target.closest('#wizExport');btn.disabled=true;try{await exportClick(false)}finally{btn.disabled=false}return}
   if(e.target.closest('#wizShare')){const btn=e.target.closest('#wizShare');btn.disabled=true;try{await exportClick(true)}finally{btn.disabled=false}return}

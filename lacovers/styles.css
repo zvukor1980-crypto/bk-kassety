@@ -85,3 +85,13 @@ body.advanced-open .project-row{display:block}
 .wiz-part-title{font-size:15px;font-weight:800;color:#1c334b}
 .wiz-part-card select{width:100%;min-height:49px;background:#fff;color:#203248;border:1px solid #c0cfdb;border-radius:11px;padding:10px;font-size:15px}
 .wiz-part-note{font-size:12px;color:#526477;line-height:1.5;margin:0}
+
+/* V8: calm print preflight and exact-size detail above A4 layout. */
+.wiz-preflight{border:1px solid #d4e0e9;border-radius:14px;padding:15px 14px;background:#f6f9fb;margin:15px 0 4px;color:#233e51}
+.wiz-preflight-title{display:flex;align-items:center;gap:9px;font-size:14px}.wiz-preflight-dot{display:inline-block;width:10px;height:10px;background:#287b64;border-radius:50%;flex:none}.wiz-preflight-dot.warn{background:#d48b45}
+.wiz-preflight-list{display:grid;gap:7px;margin-top:12px}.wiz-preflight-row{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:8px 0;border-top:1px solid #e0e7ee;font-size:12px;line-height:1.45;color:#4c6071}
+.wiz-preflight-row.warn{color:#8b502c}.wiz-preflight-row button{border:1px solid #bccdd8;border-radius:8px;color:#24445d;background:#fff;padding:7px 10px;font-weight:750;white-space:nowrap;font-size:11px}
+.wiz-preflight-foot{color:#697e90;font-size:11px;line-height:1.55;margin:12px 0 0}.wiz-preflight-loading{color:#637c90;font-size:12px}
+.wiz-fullsize canvas{max-height:520px;width:auto;max-width:100%;object-fit:contain}
+.wiz-fullsize{max-height:550px;min-height:140px}
+@media(max-width:390px){.wiz-fullsize canvas{max-height:470px}.wiz-preflight-row{align-items:flex-start}.wiz-preflight-row button{margin-top:2px}}
