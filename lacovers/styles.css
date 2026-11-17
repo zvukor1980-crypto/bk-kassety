@@ -101,3 +101,20 @@ body.advanced-open .project-row{display:block}
 .wiz-print-plan span{font-size:10px;font-weight:800;letter-spacing:1.25px;color:#52687d}
 .wiz-print-plan strong{font-size:17px;line-height:1.25;color:#21374b}
 .wiz-print-plan small{font-size:12px;line-height:1.5;color:#5f7183}
+
+/* v10 — tactile choices for printed components, no narrow selects. */
+.wiz-part-card{background:#f8fafc;gap:8px}
+.wiz-part-lead{margin:0;color:#607487;font-size:12px;line-height:1.45}
+.wiz-part-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0 2px}
+.wiz-print-part{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0;min-height:135px;border:1.5px solid #d3dfe9;border-radius:13px;background:white;color:#1c3951;text-align:left;padding:12px 11px}
+.wiz-print-part[aria-pressed="true"]{border-color:#1d5a7b;background:#ecf5fa;box-shadow:inset 0 0 0 1px #1d5a7b}
+.wiz-print-part b{font-size:13px;line-height:1.24}.wiz-print-part small{font-size:11px;color:#64798c;line-height:1.2}
+.wiz-part-check{position:absolute;right:10px;top:9px;color:#176082;opacity:0;font-weight:900}
+.wiz-print-part[aria-pressed="true"] .wiz-part-check{opacity:1}
+.wiz-part-pictogram{display:flex;align-items:center;justify-content:center;width:65px;height:35px;border:1px solid #c2cfda;border-radius:5px;background:#e5ebf0;gap:1px;padding:3px}
+.wiz-part-pictogram i{display:block;background:#819bad;border-radius:1px;height:28px;width:10px}
+.wiz-part-pictogram i:nth-child(2){width:7px;background:#294f6e}.wiz-part-pictogram i:nth-child(3){flex:1;background:#c1d2df}
+.wiz-part-pictogram--front i:nth-child(1),.wiz-part-pictogram--front i:nth-child(2),.wiz-part-pictogram--spine i:nth-child(1),.wiz-part-pictogram--spine i:nth-child(3),.wiz-part-pictogram--back i:nth-child(2),.wiz-part-pictogram--back i:nth-child(3),.wiz-part-pictogram--inside i:nth-child(1),.wiz-part-pictogram--inside i:nth-child(2){opacity:.18}
+.wiz-part-pictogram--front i:nth-child(3),.wiz-part-pictogram--spine i:nth-child(2),.wiz-part-pictogram--back i:nth-child(1),.wiz-part-pictogram--inside i:nth-child(3){background:#246585}
+.wiz-part-pictogram--inside i:nth-child(3){background:#527b65}
+@media(max-width:345px){.wiz-part-choices{gap:7px}.wiz-print-part{padding:10px 8px;min-height:130px}.wiz-print-part b{font-size:12px}}

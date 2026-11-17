@@ -193,7 +193,7 @@ function panelGridLimits(p){
  const {w,h}=CASSETTE_PRINT_PARTS[part];const [pw,ph]=sheetDimensions(p);
  const cols=Math.max(1,Math.floor((pw-2*PANEL_SHEET_MARGIN+PANEL_SHEET_GAP)/(w+PANEL_SHEET_GAP)));
  const rows=Math.max(1,Math.floor((ph-2*PANEL_SHEET_MARGIN+PANEL_SHEET_GAP)/(h+PANEL_SHEET_GAP)));
- return {w,h,pw,ph,cols,rows,capacity:Math.min(6,cols*rows)};
+ return {w,h,pw,ph,cols,rows,capacity:Math.min(18,cols*rows)};
 }
 function printPageCapacity(p){const limits=panelGridLimits(p);return limits?limits.capacity:MODES[p.mode].perSheet}
 function panelGridPositions(p,count){
@@ -242,6 +242,57 @@ async function renderProofPage(canvas,dpi=200){
  c.fillStyle='#111';c.font='3.1px Arial';c.fillText('Для кассет/CD точный масштаб важнее качества фотографии.',15,247);
  c.fillText('Совет: используйте бумагу A4 и отключите «вписать в лист».',15,254);
  return canvas;
+}
+// V10: a real-size, ink-saving fit-check sheet. No user photos are drawn.
+// This checks the box geometry before a costly color printing run.
+async function renderDiecutPage(canvas,p,dpi=150){
+ const [paperW,paperH]=sheetDimensions(p),ppm=dpi/25.4;
+ canvas.width=Math.round(paperW*ppm);canvas.height=Math.round(paperH*ppm);
+ const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.scale(canvas.width/paperW,canvas.height/paperH);
+ const label=(text,x,y,size=3.1)=>{ctx.fillStyle='#222';ctx.font=`${size}px Arial`;ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillText(text,x,y)};
+ label('ЛАКОБЛОЖКИ • ПРОБНАЯ ВЫКРОЙКА 1:1',12,10,4.1);
+ label('Без фото и заливок: сначала вырезать и примерить к коробке',12,16,3);
+ const part=getPrintPart(p);
+ const drawOutline=(kind,x,y,w,h)=>{
+  ctx.strokeStyle='#111';ctx.lineWidth=.25;ctx.strokeRect(x,y,w,h);drawCut(ctx,x,y,w,h);
+  if(kind==='cassette'||kind==='cassetteXL'){
+   const cuts=kind==='cassetteXL'?[25.4,38.1,103.2]:[25.4,38.1];
+   cuts.forEach(a=>{ctx.save();ctx.setLineDash([1.5,1.2]);ctx.lineWidth=.19;ctx.strokeStyle='#444';ctx.beginPath();ctx.moveTo(x+a,y);ctx.lineTo(x+a,y+h);ctx.stroke();ctx.restore()});
+   const captions=[['КЛАПАН',25.4],['КОРЕШОК',12.7],['ЛИЦО',65.1],...(kind==='cassetteXL'?[['ВНУТРИ',65.1]]:[])];
+   let off=0;for(const [title,width] of captions){ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#383838';const sz=width<14?1.9:width<28?2.4:3.5;ctx.font=`${sz}px Arial`;ctx.fillText(title,x+off+width/2,y+h/2,Math.max(1,width-1));ctx.restore();off+=width}
+  }else if(kind==='cdBack'){
+   for(const a of [6.25,143.75]){ctx.save();ctx.setLineDash([1.5,1.2]);ctx.lineWidth=.19;ctx.beginPath();ctx.moveTo(x+a,y);ctx.lineTo(x+a,y+h);ctx.stroke();ctx.restore()}
+   label('CD ЗАДНЯЯ ОБЛОЖКА',x+12,y+h/2,3.4);
+  }else if(kind==='booklet'){
+   ctx.save();ctx.setLineDash([1.5,1.2]);ctx.beginPath();ctx.moveTo(x+120,y);ctx.lineTo(x+120,y+h);ctx.stroke();ctx.restore();label('CD РАЗВОРОТ',x+7,y+h/2,3.6);
+  }else{label(kind==='cdFront'?'CD ЛИЦО':'ВЫКРОЙКА',x+Math.min(7,w*.1),y+h/2,3.1)}
+  label(`${w.toFixed(1).replace('.',',')} × ${h.toFixed(1).replace('.',',')} мм`,x,y+h+7,3);
+ };
+ if(part!=='full'&&p.mode.startsWith('cassette')){
+  const v=CASSETTE_PRINT_PARTS[part],x=(paperW-v.w)/2,y=(paperH-v.h)/2;
+  drawOutline('panel',x,y,v.w,v.h);label('ДЕТАЛЬ: '+({front:'ЛИЦО',spine:'КОРЕШОК',back:'ЗАДНИЙ КЛАПАН',inside:'ВНУТРИ'})[part],12,23,3.2);
+ }else{
+  const placements=artPlacements(p,1);
+  for(const a of placements){const m=MODES[a.type];drawOutline(a.type,a.x,a.y,m.w,m.h)}
+ }
+ const y=paperH-14;ctx.strokeStyle='#111';ctx.lineWidth=.3;ctx.beginPath();ctx.moveTo(17,y);ctx.lineTo(67,y);for(const x of [17,67]){ctx.moveTo(x,y-2);ctx.lineTo(x,y+2)}ctx.stroke();label('50 мм — измерить линейкой после печати',17,y-3,2.7);
+ label('PDF A4 • масштаб 100% • отключить подгонку',paperW-90,paperH-8,2.6);
+ return canvas;
+}
+async function exportDiecut(){
+ const btn=$('wizDiecut')||$('diecutBtn');if(btn)btn.disabled=true;
+ try{
+  showStatus('Готовлю примерочную выкройку без фото…');
+  const snap=structuredClone(project),canvas=document.createElement('canvas');
+  await renderDiecutPage(canvas,snap,150);
+  const jpeg=bytesFromBase64(canvas.toDataURL('image/jpeg',.94).split(',')[1]);
+  const [paperW,paperH]=sheetDimensions(snap);
+  const blob=pdfPages([{jpg:jpeg,width:canvas.width,height:canvas.height,paperW,paperH}]);
+  offerDownload(blob,'ЛакОбложки_Примерка_'+snap.mode+'_'+getPrintPart(snap)+'_A4.pdf');
+  canvas.width=canvas.height=1;
+  showStatus('Готова выкройка без фото. Распечатай 100%, вырежи и примерь к футляру.');
+ }catch(e){showStatus('Не удалось создать выкройку: '+e.message,true)}finally{if(btn)btn.disabled=false}
 }
 async function exportProof(){
  try{$('proofBtn').disabled=true;showStatus('Готовлю контрольный лист принтера…');const c=document.createElement('canvas');await renderProofPage(c,200);const jpg=bytesFromBase64(c.toDataURL('image/jpeg',.92).split(',')[1]);const blob=pdfPages([{jpg,width:c.width,height:c.height,paperW:210,paperH:297}]);offerDownload(blob,'ЛакОбложки_Проверка_100мм_A4.pdf');showStatus('Контрольный PDF создан. Измерьте квадрат 100 × 100 мм после печати.');c.width=c.height=1}
@@ -328,7 +379,7 @@ function bindForm(){const mapping={fontSelect:'font',accentColor:'accent',projec
  $('resetPhoto').onclick=()=>{project.photoControls[selectedPanel]={zoom:1,x:0,y:0,rotate:0,flip:false,brightness:100,contrast:100,fit:project.safeFit?'contain-blur':'cover'};hydrate();autosave()};
  $('randomStyle').onclick=()=>{const previous=project.style;project.style=(previous+1+Math.floor(Math.random()*(STYLES.length-1)))%STYLES.length;project.accent=STYLES[project.style].accent;project.bw=false;hydrate();autosave();showStatus('Новый дизайн применён. Фото и надписи сохранены.')};
  $('numberTracks').onclick=()=>{const initial=project.tracks||'';if(!initial.trim()){showStatus('Впиши названия песен — нумерация появится автоматически.',true);return}const updated=numberTracksText(initial);project.tracks=updated;$('tracks').value=updated;autosave();showStatus('Песни пронумерованы: '+lines(updated).length)};
- $('imageInput').addEventListener('change',async e=>{if(!e.target.files?.length)return;const target=selectedPanel;showStatus('Обрабатываю фотографию…');try{project.photos[target]=await photoToDataURL(e.target.files[0]);updatePhotoLabel();autosave();showStatus('Фото добавлено и сохранено на устройстве.')}catch(err){showStatus(err.message,true)}e.target.value=''});$('removePhoto').onclick=()=>{project.photos[selectedPanel]=null;updatePhotoLabel();autosave()};$('exportBtn').onclick=()=>exportClick(false);$('proofBtn').onclick=exportProof;$('previewReverse').onclick=()=>{previewBack=!previewBack;updateDetails();schedulePreview()};$('shareBtn').onclick=()=>exportClick(true);$('pngBtn').onclick=exportPNG;$('infoSize').onclick=()=>$('helpDialog').showModal();$('helpBtn').onclick=()=>$('helpDialog').showModal();$('closeHelp').onclick=$('okHelp').onclick=()=>$('helpDialog').close();$('helpDialog').addEventListener('click',e=>{if(e.target===$('helpDialog'))$('helpDialog').close()});
+ $('imageInput').addEventListener('change',async e=>{if(!e.target.files?.length)return;const target=selectedPanel;showStatus('Обрабатываю фотографию…');try{project.photos[target]=await photoToDataURL(e.target.files[0]);updatePhotoLabel();autosave();showStatus('Фото добавлено и сохранено на устройстве.')}catch(err){showStatus(err.message,true)}e.target.value=''});$('removePhoto').onclick=()=>{project.photos[selectedPanel]=null;updatePhotoLabel();autosave()};$('exportBtn').onclick=()=>exportClick(false);$('proofBtn').onclick=exportProof;if($('diecutBtn'))$('diecutBtn').onclick=exportDiecut;$('previewReverse').onclick=()=>{previewBack=!previewBack;updateDetails();schedulePreview()};$('shareBtn').onclick=()=>exportClick(true);$('pngBtn').onclick=exportPNG;$('infoSize').onclick=()=>$('helpDialog').showModal();$('helpBtn').onclick=()=>$('helpDialog').showModal();$('closeHelp').onclick=$('okHelp').onclick=()=>$('helpDialog').close();$('helpDialog').addEventListener('click',e=>{if(e.target===$('helpDialog'))$('helpDialog').close()});
  $('newBtn').onclick=async()=>{await storeProject(project);project=defaultProject();selectedPanel='front';await storeProject(project);storageSet('lacover-current',project.id);await refreshProjects();hydrate();showStatus('Новый проект создан.')};$('duplicateBtn').onclick=async()=>{let p=structuredClone(project);p.id='p'+Date.now();p.name=(project.album||'Альбом')+' — копия';p.album=p.name;p.updated=Date.now();project=p;await storeProject(project);storageSet('lacover-current',project.id);refreshProjects();hydrate()};$('deleteBtn').onclick=async()=>{if(!confirm('Удалить этот проект вместе с его фотографиями?'))return;await removeProject(project.id);let a=await getAllProjects();project=a.sort((x,y)=>y.updated-x.updated)[0]||defaultProject();await storeProject(project);selectedPanel='front';storageSet('lacover-current',project.id);refreshProjects();hydrate()};$('projectSelect').addEventListener('change',async e=>{clearTimeout(saveTimer);await storeProject(project);const a=await getAllProjects();const p=a.find(x=>x.id===e.target.value);if(!p)return;project=p;project.photos={front:null,spine:null,back:null,inside:null,...project.photos};await recoverCassetteSpine(project);selectedPanel='front';storageSet('lacover-current',project.id);hydrate();wizardStarted=true;wizardMedia=project.mode.startsWith('cassette')?'cassette':'cd';wizardFormatPicked=true;wizardKey='format';renderWizard()});
  $('backupAllBtn').onclick=()=>exportAllProjects().catch(e=>showStatus('Ошибка архива: '+e.message,true));
  $('restoreAllInput').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{await importAllProjects(file)}catch(err){showStatus('Ошибка восстановления коллекции: '+err.message,true)}e.target.value=''});
@@ -456,30 +507,29 @@ async function refreshPrintCheck(){
  }catch(e){area.textContent='Проверку фотографии не удалось завершить. Можно создать PDF и проверить результат вручную.'}
 }
 function printPlanHtml(p){
- const pieces=Math.max(1,Math.min(6,Number(p.copies)||1));
+ const pieces=Math.max(1,Math.min(24,Number(p.copies)||1));
  const capacity=printPageCapacity(p),sheets=Math.ceil(pieces/capacity);
  const duplex=p.mode.startsWith('cassette')&&getPrintPart(p)==='full'&&!!p.duplexCassette;
  const pages=sheets*(duplex?2:1),part=getPrintPart(p);
  const note=part==='full'?'Все части вкладыша остаются соединёнными. Сгибайте по тонким линиям.':'Детали размещаются на A4 автоматически с промежутками 8 мм, чтобы линии отреза не пересекались.';
- return `<div class="wiz-print-plan"><span>АВТОМАТИЧЕСКАЯ РАСКЛАДКА</span><strong>${pieces} шт. → ${sheets} ${sheets===1?'лист':'лист(а)'} A4${duplex?' · '+pages+' страницы для двусторонней печати':''}</strong><small>${htmlEscape(note)} Размеры деталей не меняются.</small></div>`;
+ return `<div class="wiz-print-plan"><span>АВТОМАТИЧЕСКАЯ РАСКЛАДКА</span><strong>${pieces} шт. → ${sheets} ${sheets===1?'лист':'листа'} A4${duplex?' · '+pages+' страницы для двусторонней печати':''}</strong><small>${htmlEscape(note)} На каждом листе до ${capacity} шт. Размеры деталей не меняются.</small></div>`;
 }
 function wizPrintScreen(){
  const tape=project.mode.startsWith('cassette'),part=getPrintPart(project);
- const choices=tape?`<div class="wiz-part-card"><label for="wizPrintPart" class="wiz-part-title">Что именно напечатать?</label>
-  <select id="wizPrintPart" aria-label="Часть кассетного вкладыша">
-   ${Object.entries(CASSETTE_PRINT_PARTS).filter(([key])=>key!=='inside'||project.mode==='cassetteXL').map(([key,spec])=>`<option value="${key}" ${part===key?'selected':''}>${spec.label}${key==='full'?'':` · ${spec.w} × ${spec.h} мм`}</option>`).join('')}
-  </select><p class="wiz-part-note">${part==='full'?'Все части вместе, со сгибами без промежутков.':`Только выбранная часть. Размер ${CASSETTE_PRINT_PARTS[part].w} × ${CASSETTE_PRINT_PARTS[part].h} мм, с отметками разреза.`}</p></div>`:'';
+ const choices=tape?`<div class="wiz-part-card"><strong class="wiz-part-title">Что именно напечатать?</strong><p class="wiz-part-lead">Нажми нужную деталь. Её размер программа выставит сама.</p><div class="wiz-part-choices">
+  ${Object.entries(CASSETTE_PRINT_PARTS).filter(([key])=>key!=='inside'||project.mode==='cassetteXL').map(([key,spec])=>`<button type="button" class="wiz-print-part" aria-pressed="${part===key}" data-wiz-choice="part:${key}"><span class="wiz-part-pictogram wiz-part-pictogram--${key}" aria-hidden="true"><i></i><i></i><i></i></span><b>${key==='full'?'Весь вкладыш':key==='front'?'Лицевая':key==='spine'?'Корешок':key==='back'?'Задний клапан':'Внутренняя'}</b><small>${key==='full'?`${MODES[project.mode].w} × 101,6 мм`:`${spec.w} × ${spec.h} мм`}</small><span class="wiz-part-check">✓</span></button>`).join('')}
+  </div><p class="wiz-part-note">${part==='full'?'Все части вместе, без зазоров. Отрезаем по внешнему краю, складываем по линиям.':`Только выбранная деталь. Напечатается точно ${CASSETTE_PRINT_PARTS[part].w} × ${CASSETTE_PRINT_PARTS[part].h} мм.`}</p></div>`:'';
  return `<div class="wiz-content"><div class="wiz-eyebrow">ФИНИШ</div><h1>Проверка и печать</h1>
  <p class="wiz-desc">Выбери, что печатать. Программа подготовит лист A4 в точном размере.</p>
  <div class="wiz-success">✓ ${htmlEscape(MODES[project.mode].name)} · 100% · PDF A4</div>
  ${choices}
- <div class="wiz-print-options"><label>Сколько экземпляров?<select data-wiz-field="copies">${[1,2,4,6].map(n=>`<option value="${n}" ${+project.copies===n?'selected':''}>${n} шт.</option>`).join('')}</select></label>
+ <div class="wiz-print-options"><label>Сколько экземпляров?<select data-wiz-field="copies">${[1,2,4,6,8,12,18,24].map(n=>`<option value="${n}" ${+project.copies===n?'selected':''}>${n} шт.</option>`).join('')}</select></label>
  <label>Тип печати<select data-wiz-field="bw"><option value="false" ${!project.bw?'selected':''}>Цветная</option><option value="true" ${project.bw?'selected':''}>Чёрно-белая</option></select></label></div>
  ${tape&&part==='full'?`<label class="wiz-checkbox"><input type="checkbox" id="wizDuplex" ${project.duplexCassette?'checked':''}> Печатать обе стороны вкладыша</label>`:''}
  <div id="wizPrintPlan">${printPlanHtml(project)}</div>
  <div class="wiz-preflight" id="wizPrintCheck" role="status" aria-live="polite"><div class="wiz-preflight-loading">Проверяю фотографии…</div></div>
  <button class="wiz-primary-action" id="wizExport" type="button">Создать PDF для печати ↗</button>
- <div class="wiz-export-row"><button type="button" id="wizShare">Отправить PDF на принтер</button><button type="button" id="wizProof">Пробный лист для проверки размеров</button></div>
+ <div class="wiz-export-row"><button type="button" id="wizShare">Отправить PDF на принтер</button><button type="button" id="wizDiecut">Пробная выкройка без фотографий — 1:1</button><button type="button" id="wizProof">Проверить принтер: квадрат 100 мм</button></div>
  <p class="wiz-note">Печать 100% / «фактический размер». Не включай «подогнать». Проверяй линейку 50 мм перед разрезанием.</p>
  ${wizArtPlaceholder()}</div>`;
 }
@@ -517,6 +567,7 @@ function wizardBack(){const steps=wizSteps(),i=steps.indexOf(wizardKey);if(i<=0)
 function wizardStart(){wizardStarted=true;wizardMedia='';wizardFormatPicked=false;wizardKey='media';renderWizard();window.scrollTo({top:0,behavior:'smooth'})}
 function wizardSelect(choice){if(choice==='start:new'){wizardMakeNew();return}if(choice==='start:raash'){wizardUseRaash();return}if(choice==='start:continue'){wizardStarted=true;wizardMedia=project.mode.startsWith('cassette')?'cassette':'cd';wizardFormatPicked=true;wizardKey='format';renderWizard();return}if(choice.startsWith('media:')){wizardMedia=choice.slice(6);wizardFormatPicked=false;project.mode=WIZARD_FORMATS[wizardMedia][0];selectedPanel=wizPhotoPanels()[0];hydrate();autosave()}
  else if(choice.startsWith('mode:')){project.mode=choice.slice(5);wizardFormatPicked=true;selectedPanel=wizPhotoPanels()[0];hydrate();autosave()}
+ else if(choice.startsWith('part:')){project.printPart=choice.slice(5);autosave()}
  else if(choice.startsWith('fit:')){ensurePhotoControls(selectedPanel).fit=choice.slice(4);project.safeFit=true;autosave()}
  else if(choice.startsWith('text:')){project.showText=choice==='text:yes';autosave()}
  else if(choice.startsWith('decorate:')){project.decorate=choice.slice(9);autosave()}
@@ -555,6 +606,7 @@ function setupWizard(){const area=$('wizardProjectArea'),row=document.querySelec
   if(e.target.closest('#wizExport')){const btn=e.target.closest('#wizExport');btn.disabled=true;try{await exportClick(false)}finally{btn.disabled=false}return}
   if(e.target.closest('#wizShare')){const btn=e.target.closest('#wizShare');btn.disabled=true;try{await exportClick(true)}finally{btn.disabled=false}return}
   if(e.target.closest('#wizProof')){await exportProof();return}
+  if(e.target.closest('#wizDiecut')){await exportDiecut();return}
  });
  $('wizardContent').addEventListener('input',e=>{const el=e.target;if(el.dataset.wizField)wizardField(el);if(el.dataset.wizPhoto){ensurePhotoControls(selectedPanel)[el.dataset.wizPhoto]=+el.value;autosave()}});
  $('wizardContent').addEventListener('change',e=>{const el=e.target;if(el.id==='wizPhotoInput'&&el.files?.[0])wizardUpload(el.files[0]);if(el.id==='wizDuplex'){project.duplexCassette=el.checked;autosave();renderWizard()}if(el.id==='wizPrintPart'){project.printPart=el.value;autosave();renderWizard();return}if(el.dataset.wizField){wizardField(el);if(wizardKey==='print'&&['copies','bw'].includes(el.dataset.wizField))renderWizard();}});
