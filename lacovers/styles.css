@@ -95,3 +95,9 @@ body.advanced-open .project-row{display:block}
 .wiz-fullsize canvas{max-height:520px;width:auto;max-width:100%;object-fit:contain}
 .wiz-fullsize{max-height:550px;min-height:140px}
 @media(max-width:390px){.wiz-fullsize canvas{max-height:470px}.wiz-preflight-row{align-items:flex-start}.wiz-preflight-row button{margin-top:2px}}
+
+/* v9 — compact, legible print plan. */
+.wiz-print-plan{margin:15px 0 8px;border:1px solid #cfdfed;background:#eef4fa;border-radius:13px;padding:15px 16px;display:flex;flex-direction:column;gap:6px}
+.wiz-print-plan span{font-size:10px;font-weight:800;letter-spacing:1.25px;color:#52687d}
+.wiz-print-plan strong{font-size:17px;line-height:1.25;color:#21374b}
+.wiz-print-plan small{font-size:12px;line-height:1.5;color:#5f7183}

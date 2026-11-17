@@ -185,7 +185,31 @@ function getPrintPart(p){
  const part=p.printPart||'full';
  return part==='inside'&&p.mode!=='cassetteXL'?'full':CASSETTE_PRINT_PARTS[part]?part:'full';
 }
-function printPageCapacity(p){return getPrintPart(p)==='full'?MODES[p.mode].perSheet:2}
+// Automatic millimetre-based imposition for individual cassette panels.
+// Eight millimetres between panels keeps the cutting marks from touching.
+const PANEL_SHEET_MARGIN=13, PANEL_SHEET_GAP=8;
+function panelGridLimits(p){
+ const part=getPrintPart(p);if(part==='full')return null;
+ const {w,h}=CASSETTE_PRINT_PARTS[part];const [pw,ph]=sheetDimensions(p);
+ const cols=Math.max(1,Math.floor((pw-2*PANEL_SHEET_MARGIN+PANEL_SHEET_GAP)/(w+PANEL_SHEET_GAP)));
+ const rows=Math.max(1,Math.floor((ph-2*PANEL_SHEET_MARGIN+PANEL_SHEET_GAP)/(h+PANEL_SHEET_GAP)));
+ return {w,h,pw,ph,cols,rows,capacity:Math.min(6,cols*rows)};
+}
+function printPageCapacity(p){const limits=panelGridLimits(p);return limits?limits.capacity:MODES[p.mode].perSheet}
+function panelGridPositions(p,count){
+ const g=panelGridLimits(p);if(!g)return[];
+ const n=Math.max(0,Math.min(count,g.capacity));if(!n)return[];
+ // Very thin spines are grouped in one row when possible; wider flaps use balanced rows.
+ const cols=n<=g.cols?n:Math.min(g.cols,Math.ceil(n/g.rows));
+ const rows=Math.ceil(n/cols),blockH=rows*g.h+(rows-1)*PANEL_SHEET_GAP;
+ const y0=(g.ph-blockH)/2,positions=[];
+ for(let row=0;row<rows;row++){
+  const inRow=Math.min(cols,n-row*cols);const blockW=inRow*g.w+(inRow-1)*PANEL_SHEET_GAP;
+  const x0=(g.pw-blockW)/2;
+  for(let col=0;col<inRow;col++)positions.push({x:x0+col*(g.w+PANEL_SHEET_GAP),y:y0+row*(g.h+PANEL_SHEET_GAP)});
+ }
+ return positions;
+}
 function drawCassettePart(ctx,part,x,y,p,img){
  const {w,h}=CASSETTE_PRINT_PARTS[part];
  if(part==='front')drawFront(ctx,x,y,w,h,p,img);
@@ -197,10 +221,7 @@ function drawCassettePart(ctx,part,x,y,p,img){
 async function renderPage(canvas,p,pageIndex,dpi,countOverride,backSide=false){const [paperW,paperH]=sheetDimensions(p);let per=printPageCapacity(p);let copies=Number(countOverride??p.copies);let start=pageIndex*per;let thisPage=Math.min(per,Math.max(0,copies-start));const ppm=dpi/25.4;canvas.width=Math.round(paperW*ppm);canvas.height=Math.round(paperH*ppm);const ctx=canvas.getContext('2d',{alpha:false,willReadFrequently:!!p.bw});ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.scale(canvas.width/paperW,canvas.height/paperH);const loaded=await resolveImages(p);
  const printPart=getPrintPart(p);
  if(printPart!=='full'&&!backSide){
-  const {w,h}=CASSETTE_PRINT_PARTS[printPart];
-  const xs=(paperW-w)/2;
-  const ys=thisPage===1?[(paperH-h)/2]:[22,155];
-  ys.forEach(y=>drawCassettePart(ctx,printPart,xs,y,p,loaded));
+  panelGridPositions(p,thisPage).forEach(({x,y})=>drawCassettePart(ctx,printPart,x,y,p,loaded));
  }else{
   const layout=artPlacements(p,thisPage);
   for(const item of layout){if(backSide&&(item.type==='cassette'||item.type==='cassetteXL')){artReverse(ctx,item.type,paperW-item.x-MODES[item.type].w,item.y,p,loaded)}else art(ctx,item.type,item.x,item.y,p,loaded)}
@@ -434,6 +455,14 @@ async function refreshPrintCheck(){
    '<p class="wiz-preflight-foot">Оценка по исходным пикселям: она не гарантирует качество принтера. Сам PDF создаётся в физических миллиметрах, печатайте 100%.</p>';
  }catch(e){area.textContent='Проверку фотографии не удалось завершить. Можно создать PDF и проверить результат вручную.'}
 }
+function printPlanHtml(p){
+ const pieces=Math.max(1,Math.min(6,Number(p.copies)||1));
+ const capacity=printPageCapacity(p),sheets=Math.ceil(pieces/capacity);
+ const duplex=p.mode.startsWith('cassette')&&getPrintPart(p)==='full'&&!!p.duplexCassette;
+ const pages=sheets*(duplex?2:1),part=getPrintPart(p);
+ const note=part==='full'?'Все части вкладыша остаются соединёнными. Сгибайте по тонким линиям.':'Детали размещаются на A4 автоматически с промежутками 8 мм, чтобы линии отреза не пересекались.';
+ return `<div class="wiz-print-plan"><span>АВТОМАТИЧЕСКАЯ РАСКЛАДКА</span><strong>${pieces} шт. → ${sheets} ${sheets===1?'лист':'лист(а)'} A4${duplex?' · '+pages+' страницы для двусторонней печати':''}</strong><small>${htmlEscape(note)} Размеры деталей не меняются.</small></div>`;
+}
 function wizPrintScreen(){
  const tape=project.mode.startsWith('cassette'),part=getPrintPart(project);
  const choices=tape?`<div class="wiz-part-card"><label for="wizPrintPart" class="wiz-part-title">Что именно напечатать?</label>
@@ -447,6 +476,7 @@ function wizPrintScreen(){
  <div class="wiz-print-options"><label>Сколько экземпляров?<select data-wiz-field="copies">${[1,2,4,6].map(n=>`<option value="${n}" ${+project.copies===n?'selected':''}>${n} шт.</option>`).join('')}</select></label>
  <label>Тип печати<select data-wiz-field="bw"><option value="false" ${!project.bw?'selected':''}>Цветная</option><option value="true" ${project.bw?'selected':''}>Чёрно-белая</option></select></label></div>
  ${tape&&part==='full'?`<label class="wiz-checkbox"><input type="checkbox" id="wizDuplex" ${project.duplexCassette?'checked':''}> Печатать обе стороны вкладыша</label>`:''}
+ <div id="wizPrintPlan">${printPlanHtml(project)}</div>
  <div class="wiz-preflight" id="wizPrintCheck" role="status" aria-live="polite"><div class="wiz-preflight-loading">Проверяю фотографии…</div></div>
  <button class="wiz-primary-action" id="wizExport" type="button">Создать PDF для печати ↗</button>
  <div class="wiz-export-row"><button type="button" id="wizShare">Отправить PDF на принтер</button><button type="button" id="wizProof">Пробный лист для проверки размеров</button></div>
@@ -463,11 +493,11 @@ function renderWizard(){const steps=wizSteps();if(!steps.includes(wizardKey))wiz
  else if(wizardKey==='review'){const missing=wizPhotoPanels().filter(q=>!project.photos[q]);const hasAny=wizPhotoPanels().some(q=>!!project.photos[q]);html=`<div class="wiz-content"><div class="wiz-eyebrow">ПРОВЕРКА · A4</div><h1>Всё правильно?</h1><p class="wiz-desc">${project.mode.startsWith('cassette')?'Слева направо: задний клапан 25,4 мм, корешок 12,7 мм и лицевая сторона 65,1 мм. Они соединены без зазора.':'Это точный макет листа для печати в масштабе 100%.'}</p>${wizArtPlaceholder()}<p class="wiz-preview-meta">${htmlEscape(MODES[project.mode].name)} · ${MODES[project.mode].w} × ${MODES[project.mode].h} мм · лист A4</p>${!hasAny?'<p class="wiz-note">Фотографий пока нет — лист будет пустым. Вернись назад и добавь фото или продолжай, если нужен чистый шаблон.</p>':missing.length?'<p class="wiz-note">Стороны без отдельной фотографии программа оформляет нейтральным фоном. Лицевое фото и корешок остаются без искажений.</p>':''}<div class="wiz-compact-controls"><button type="button" data-wiz-action="return-photo">← Изменить фотографии</button><button type="button" data-wiz-action="return-text">Изменить надписи</button></div></div>`}
  else if(wizardKey==='print')html=wizPrintScreen();
  c.innerHTML=html;
- $('wizardBack').disabled=ix===0;$('wizardBack').hidden=wizardKey==='start';$('wizardNext').hidden=wizardKey==='start';$('wizardNext').textContent=wizardKey==='print'?'Создать PDF ↗':'Далее →';$('wizardFeedback').textContent='';
+ $('wizardBack').disabled=ix===0;$('wizardBack').hidden=wizardKey==='start';$('wizardNext').hidden=wizardKey==='start'||wizardKey==='print';$('wizardNext').textContent=wizardKey==='print'?'Создать PDF ↗':'Далее →';$('wizardFeedback').textContent='';
  schedulePreview();
  if(wizardKey==='print')refreshPrintCheck();
 }
-async function renderWizardPreview(p){const canvas=$('wizardPreview');if(!canvas||!canvas.isConnected)return;const key=wizardKey;if(key==='review'||key==='print'){await renderPage(canvas,key==='review'?{...p,printPart:'full'}:p,0,90,1,false);const detail=$('wizardDetail');if(detail&&p.mode.startsWith('cassette')){
+async function renderWizardPreview(p){const canvas=$('wizardPreview');if(!canvas||!canvas.isConnected)return;const key=wizardKey;if(key==='review'||key==='print'){await renderPage(canvas,key==='review'?{...p,printPart:'full'}:p,0,90,key==='print'?undefined:1,false);const detail=$('wizardDetail');if(detail&&p.mode.startsWith('cassette')){
   const part=key==='print'?getPrintPart(p):'full';
   const dims=part==='full'?MODES[p.mode]:CASSETTE_PRINT_PARTS[part];
   const targetHeight=650,physicalW=dims.w,physicalH=dims.h;
@@ -527,7 +557,7 @@ function setupWizard(){const area=$('wizardProjectArea'),row=document.querySelec
   if(e.target.closest('#wizProof')){await exportProof();return}
  });
  $('wizardContent').addEventListener('input',e=>{const el=e.target;if(el.dataset.wizField)wizardField(el);if(el.dataset.wizPhoto){ensurePhotoControls(selectedPanel)[el.dataset.wizPhoto]=+el.value;autosave()}});
- $('wizardContent').addEventListener('change',e=>{const el=e.target;if(el.id==='wizPhotoInput'&&el.files?.[0])wizardUpload(el.files[0]);if(el.id==='wizDuplex'){project.duplexCassette=el.checked;autosave()}if(el.id==='wizPrintPart'){project.printPart=el.value;autosave();renderWizard();return}if(el.dataset.wizField)wizardField(el)});
+ $('wizardContent').addEventListener('change',e=>{const el=e.target;if(el.id==='wizPhotoInput'&&el.files?.[0])wizardUpload(el.files[0]);if(el.id==='wizDuplex'){project.duplexCassette=el.checked;autosave();renderWizard()}if(el.id==='wizPrintPart'){project.printPart=el.value;autosave();renderWizard();return}if(el.dataset.wizField){wizardField(el);if(wizardKey==='print'&&['copies','bw'].includes(el.dataset.wizField))renderWizard();}});
 
 }
 
